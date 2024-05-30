@@ -1,0 +1,1001 @@
+---
+title: "New Data Project"
+author: "Ben Ellman"
+date: "2024-04-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+#load base packages
+library(tidyverse)
+library(ggplot2)
+library(rvest)
+library(data.table)
+library(readxl)
+library(datawizard)
+library(plm)
+
+#CRIMES FROM CHICAGO PD 2001-PRESENT
+chi_crimes <- read.csv('Crime Stats/Crimes_2012_to_2024_04_29.csv')
+View(chi_crimes)
+
+chi_communities <- read.csv('Crime Stats/CommAreas.csv')
+View(chi_communities)
+
+#load in IUCR crime type data reference table
+iucr_table <- read.csv('Crime Stats/Chicago_Police_Department_-_Illinois_Uniform_Crime_Reporting__IUCR__Codes_20240506.csv')
+
+iucr_table <- iucr_table %>%
+mutate(IUCR = ifelse(nchar(iucr_table$IUCR)==3,paste('0',iucr_table$IUCR,sep=''),iucr_table$IUCR))
+
+#add violent_crime indicator column to iucr_table
+iucr_table <- iucr_table %>%
+mutate(violent = case_when(
+  INDEX.CODE == 'I' & PRIMARY.DESCRIPTION == 'HOMICIDE' ~ 1,
+  INDEX.CODE == 'I' & PRIMARY.DESCRIPTION == 'CRIMINAL SEXUAL ASSAULT' ~ 1,
+  INDEX.CODE == 'I' & PRIMARY.DESCRIPTION == 'BATTERY' ~ 1,
+  INDEX.CODE == 'I' & PRIMARY.DESCRIPTION == 'ASSAULT' ~ 1,
+  INDEX.CODE == 'I' & PRIMARY.DESCRIPTION == 'ROBBERY' ~ 1,
+  INDEX.CODE == 'I' & PRIMARY.DESCRIPTION == 'RITUALISM' ~ 1,
+  INDEX.CODE == 'I' & PRIMARY.DESCRIPTION == 'ARSON' ~ 1,
+  INDEX.CODE == 'I' & PRIMARY.DESCRIPTION == 'HUMAN TRAFFICKING' ~ 1,
+  .default = 0
+))
+
+#join chi_communities w/ chi_crimes data set
+chi_crimes_2 <- chi_communities %>%
+select(c(AREA_NUMBE,COMMUNITY)) %>%
+left_join(chi_crimes,by=c('AREA_NUMBE'='Community.Area'))
+
+#join iucr_table w/ chi_crimes_2 to get index vs. non-index (violent vs. non-violent) crimes
+chi_crimes_2 <- iucr_table %>%
+select(c(IUCR,violent)) %>%
+right_join(chi_crimes_2,by='IUCR')
+
+chi_crimes_2 <- chi_crimes_2[,c(3:8,1,9:10,2,11:32)]
+
+#arrest rate by crime type
+sum_arrest_rate_by_crime_year <- chi_crimes_2 %>%
+group_by(Primary.Type,Year) %>%
+summarize(Arrest_rate = sum(ifelse(Arrest=='true',1,0))/n(), n = n()) %>%
+arrange(Primary.Type,Year)
+
+#create crime by community summary table and crime by community by year for further analysis with year by year census data
+community_crime <- chi_crimes_2 %>%
+select(c(COMMUNITY,Primary.Type,Description,violent,Location.Description,Arrest,Domestic,Beat,District,Ward,FBI.Code,Year)) %>%
+group_by(COMMUNITY) %>%
+summarize(Criminal_Damage = sum(ifelse(Primary.Type=='CRIMINAL DAMAGE',1,0)), Battery = sum(ifelse(Primary.Type=='BATTERY',1,0)), Robbery = sum(ifelse(Primary.Type=='ROBBERY',1,0)), Theft = sum(ifelse(Primary.Type=='THEFT',1,0)), Assaults = sum(ifelse(Primary.Type=='ASSAULT',1,0)), Burglary = sum(ifelse(Primary.Type=='BURGLARY',1,0)), GTA = sum(ifelse(Primary.Type=='MOTOR VEHICLE THEFT',1,0)), Narcotics = sum(ifelse(Primary.Type=='NARCOTICS',1,0)), Weapons_violation = sum(ifelse(Primary.Type=='WEAPONS VIOLATION',1,0)), SA = sum(ifelse(Primary.Type=='CRIMINAL SEXUAL ASSAULT'|Primary.Type=='CRIM SEXUAL ASSAULT',1,0)), Sex_Offense = sum(ifelse(Primary.Type=='SEX OFFENSE',1,0)), Stalking = sum(ifelse(Primary.Type=='Stalking',1,0)), Homicide = sum(ifelse(Primary.Type=='HOMICIDE',1,0)), Arson = sum(ifelse(Primary.Type=='ARSON',1,0)), Kidnapping = sum(ifelse(Primary.Type=='KIDNAPPING',1,0)), Prostitution = sum(ifelse(Primary.Type=='PROSTITUTION',1,0)), Human_traf = sum(ifelse(Primary.Type=='HUMAN TRAFFICKING',1,0)), Deceptive_practice = sum(ifelse(Primary.Type=='DECEPTIVE PRACTICE',1,0)),
+Arrest_rate = sum(ifelse(Arrest=='true',1,0))/n(),
+Domestics = sum(ifelse(Domestic=='true',1,0)),
+Violent = sum(violent,na.rm=TRUE)
+)
+
+community_crime_yr <- chi_crimes_2 %>%
+select(c(COMMUNITY,Primary.Type,Description,Location.Description,violent,Arrest,Domestic,Beat,District,Ward,FBI.Code,Year)) %>%
+filter(Year != 2013) %>%
+group_by(COMMUNITY,Year) %>%
+summarize(Criminal_Damage = sum(ifelse(Primary.Type=='CRIMINAL DAMAGE',1,0)), Battery = sum(ifelse(Primary.Type=='BATTERY',1,0)), Robbery = sum(ifelse(Primary.Type=='ROBBERY',1,0)), Theft = sum(ifelse(Primary.Type=='THEFT',1,0)), Assaults = sum(ifelse(Primary.Type=='ASSAULT',1,0)), Burglary = sum(ifelse(Primary.Type=='BURGLARY',1,0)), GTA = sum(ifelse(Primary.Type=='MOTOR VEHICLE THEFT',1,0)), Narcotics = sum(ifelse(Primary.Type=='NARCOTICS',1,0)), Weapons_violation = sum(ifelse(Primary.Type=='WEAPONS VIOLATION',1,0)), SA = sum(ifelse(Primary.Type=='CRIMINAL SEXUAL ASSAULT'|Primary.Type=='CRIM SEXUAL ASSAULT',1,0)), Sex_Offense = sum(ifelse(Primary.Type=='SEX OFFENSE',1,0)), Stalking = sum(ifelse(Primary.Type=='Stalking',1,0)), Homicide = sum(ifelse(Primary.Type=='HOMICIDE',1,0)), Arson = sum(ifelse(Primary.Type=='ARSON',1,0)), Kidnapping = sum(ifelse(Primary.Type=='KIDNAPPING',1,0)), Prostitution = sum(ifelse(Primary.Type=='PROSTITUTION',1,0)), Human_traf = sum(ifelse(Primary.Type=='HUMAN TRAFFICKING',1,0)), Deceptive_practice = sum(ifelse(Primary.Type=='DECEPTIVE PRACTICE',1,0)),
+Arrest_rate = sum(ifelse(Arrest=='true',1,0))/n(),
+Domestics = sum(ifelse(Domestic=='true',1,0)),
+Violent = sum(violent,na.rm=TRUE)
+)
+
+crime_yr_sum <- chi_crimes_2 %>%
+select(c(COMMUNITY,Primary.Type,Description,Location.Description,violent,Arrest,Domestic,Beat,District,Ward,FBI.Code,Year)) %>%
+filter(Year != 2013) %>%
+group_by(Year) %>%
+summarize(Criminal_Damage = sum(ifelse(Primary.Type=='CRIMINAL DAMAGE',1,0)), Battery = sum(ifelse(Primary.Type=='BATTERY',1,0)), Robbery = sum(ifelse(Primary.Type=='ROBBERY',1,0)), Theft = sum(ifelse(Primary.Type=='THEFT',1,0)), Assaults = sum(ifelse(Primary.Type=='ASSAULT',1,0)), Burglary = sum(ifelse(Primary.Type=='BURGLARY',1,0)), GTA = sum(ifelse(Primary.Type=='MOTOR VEHICLE THEFT',1,0)), Narcotics = sum(ifelse(Primary.Type=='NARCOTICS',1,0)), Weapons_violation = sum(ifelse(Primary.Type=='WEAPONS VIOLATION',1,0)), SA = sum(ifelse(Primary.Type=='CRIMINAL SEXUAL ASSAULT'|Primary.Type=='CRIM SEXUAL ASSAULT',1,0)), Sex_Offense = sum(ifelse(Primary.Type=='SEX OFFENSE',1,0)), Stalking = sum(ifelse(Primary.Type=='Stalking',1,0)), Homicide = sum(ifelse(Primary.Type=='HOMICIDE',1,0)), Arson = sum(ifelse(Primary.Type=='ARSON',1,0)), Kidnapping = sum(ifelse(Primary.Type=='KIDNAPPING',1,0)), Prostitution = sum(ifelse(Primary.Type=='PROSTITUTION',1,0)), Human_traf = sum(ifelse(Primary.Type=='HUMAN TRAFFICKING',1,0)), Deceptive_practice = sum(ifelse(Primary.Type=='DECEPTIVE PRACTICE',1,0)),
+Arrest_rate = sum(ifelse(Arrest=='true',1,0))/n(),
+Domestics = sum(ifelse(Domestic=='true',1,0)),
+Violent = sum(violent,na.rm=TRUE)
+)
+
+#make crime year summary more robust w/ crime rates
+chi_tot_pop <- data.frame(c(2015:2023),c(sum(chi_2015$TOT_POP),sum(chi_2016$TOT_POP),sum(chi_2017$TOT_POP),sum(chi_2018$TOT_POP),sum(chi_2019$TOT_POP),sum(chi_2020$TOT_POP),sum(chi_2021$TOT_POP),sum(chi_2022$TOT_POP),sum(chi_2023$TOT_POP)))
+
+colnames(chi_tot_pop) <- c('Year','TOT_POP')
+
+crime_yr_sum <- crime_yr_sum %>%
+group_by(Year) %>%
+left_join(chi_tot_pop,by='Year') %>%
+mutate(crime_rate = ((Criminal_Damage + Battery + Robbery + Theft + Assaults+ Burglary + GTA + Narcotics + Weapons_violation + SA + Sex_Offense + Stalking + Homicide + Arson + Kidnapping + Prostitution + Human_traf + Deceptive_practice)/TOT_POP)*100000,
+violent_rate = (Violent/TOT_POP)*100000,
+homicide_rate = (Homicide/TOT_POP)*100000,
+narcotics_rate = (Narcotics/TOT_POP)*100000,
+weapons_rate = (Weapons_violation/TOT_POP)*100000
+)
+
+#add in Community socioeconomic factors
+comm_snapshot_23 <- read.csv('Crime Stats/Community_Data_Snapshots_2023_-7949553649742586148.csv')
+View(comm_snapshot_23)
+
+comm_snapshot_22 <- read.csv('Crime Stats/CDStest_2022.csv')
+comm_snapshot_21 <- read.csv('Crime Stats/CDStest_2021.csv')
+comm_snapshot_20 <- read.csv('Crime Stats/CDStest_2020.csv')
+comm_snapshot_19 <- read.csv('Crime Stats/CDStest_-2019.csv')
+comm_snapshot_18 <- read.csv('Crime Stats/CDStest_-2018.csv')
+comm_snapshot_17 <- read.csv('Crime Stats/CDStest_-2017.csv')
+comm_snapshot_16 <- read.csv('Crime Stats/CDStest_-2016.csv')
+comm_snapshot_15 <- read.csv('Crime Stats/CDStest_-2015.csv')
+
+#investigate 2023 crime in relation to community snapshots to investigate possible explanatory variables
+#clean comm_snapshot_23 to fit join
+comm_snapshot_23 <- comm_snapshot_23 %>%
+mutate(GEOG = toupper(GEOG)) %>%
+mutate(GEOG = ifelse(GEOG=="O'HARE",'OHARE',GEOG)) %>%
+mutate(GEOG = ifelse(GEOG=='THE LOOP','LOOP',GEOG))
+
+#JOIN community snapshot and crimes by community for 2023 to create chi_2023 dataset
+chi_2023 <- community_crime_yr %>%
+filter(Year == 2023) %>%
+inner_join(comm_snapshot_23,by=c('COMMUNITY'='GEOG'))
+View(chi_2023)
+
+#add to chi_2023 data set
+chi_2023 <- chi_2023 %>%
+group_by(COMMUNITY) %>%
+mutate(crime_rate = ((Criminal_Damage + Battery + Robbery + Theft + Assaults+ Burglary + GTA + Narcotics + Weapons_violation + SA + Sex_Offense + Stalking + Homicide + Arson + Kidnapping + Prostitution + Human_traf + Deceptive_practice)/TOT_POP)*100000,
+violent_rate = (Violent/TOT_POP)*100000,
+crim_damage_rate = (Criminal_Damage/TOT_POP)*100000,
+battery_rate = (Battery/TOT_POP)*100000,
+robbery_rate = (Robbery/TOT_POP)*100000,
+theft_rate = (Theft/TOT_POP)*100000,
+assault_rate = (Assaults/TOT_POP)*100000,
+burglary_rate = (Burglary/TOT_POP)*100000,
+gta_rate = (GTA/TOT_POP)*100000,
+narcotics_rate = (Narcotics/TOT_POP)*100000,
+weapons_rate = (Weapons_violation/TOT_POP)*100000,
+sa_rate = (SA/TOT_POP)*100000,
+sex_off_rate = (Sex_Offense/TOT_POP)*100000,
+stalking_rate = (Stalking/TOT_POP)*100000,
+homicide_rate = (Homicide/TOT_POP)*100000,
+arson_rate = (Arson/TOT_POP)*100000,
+kidnap_rate = (Kidnapping/TOT_POP)*100000,
+prostit_rate = (Prostitution/TOT_POP)*100000,
+human_traf_rate = (Human_traf/TOT_POP)*100000,
+deceptive_rate = (Deceptive_practice/TOT_POP)*100000)
+
+#add unemp lbfrc participation rates
+chi_2023 <- chi_2023 %>%
+mutate(unemp_rate = UNEMP/IN_LBFRC,
+lbfrc_participation = IN_LBFRC/(IN_LBFRC+NOT_IN_LBFRC))
+
+#graph of unemployment rates to violent crime rate for 2023 
+unemp_violent_2023_plot <- 
+ggplot(chi_2023,aes(x=unemp_rate, y=violent_rate)) +
+geom_point(aes(size=TOT_POP),color='maroon') +
+geom_smooth() +
+geom_hline(aes(yintercept=mean(violent_rate))) +
+labs(title='Unemployment vs Violent Crime Rates in Chicago Communities 2023',
+x='Unemployment Rate',
+y='Violent Crimes (per 100,000 people)',
+size = 'Community Population')
+
+#clean comm_snapshot_22
+comm_snapshot_22 <- comm_snapshot_22 %>%
+mutate(GEOG = toupper(GEOG)) %>%
+mutate(GEOG = ifelse(GEOG=="O'HARE",'OHARE',GEOG)) %>%
+mutate(GEOG = ifelse(GEOG=='THE LOOP','LOOP',GEOG))
+
+#JOIN community snapshot and crimes by community for 2022 to create chi_2022 dataset
+chi_2022 <- community_crime_yr %>%
+filter(Year == 2022) %>%
+inner_join(comm_snapshot_22,by=c('COMMUNITY'='GEOG'))
+View(chi_2022)
+
+#add to chi_2022 data set
+chi_2022 <- chi_2022 %>%
+group_by(COMMUNITY) %>%
+mutate(crime_rate = ((Criminal_Damage + Battery + Robbery + Theft + Assaults+ Burglary + GTA + Narcotics + Weapons_violation + SA + Sex_Offense + Stalking + Homicide + Arson + Kidnapping + Prostitution + Human_traf + Deceptive_practice)/TOT_POP)*100000,
+violent_rate = (Violent/TOT_POP)*100000,
+crim_damage_rate = (Criminal_Damage/TOT_POP)*100000,
+battery_rate = (Battery/TOT_POP)*100000,
+robbery_rate = (Robbery/TOT_POP)*100000,
+theft_rate = (Theft/TOT_POP)*100000,
+assault_rate = (Assaults/TOT_POP)*100000,
+burglary_rate = (Burglary/TOT_POP)*100000,
+gta_rate = (GTA/TOT_POP)*100000,
+narcotics_rate = (Narcotics/TOT_POP)*100000,
+weapons_rate = (Weapons_violation/TOT_POP)*100000,
+sa_rate = (SA/TOT_POP)*100000,
+sex_off_rate = (Sex_Offense/TOT_POP)*100000,
+stalking_rate = (Stalking/TOT_POP)*100000,
+homicide_rate = (Homicide/TOT_POP)*100000,
+arson_rate = (Arson/TOT_POP)*100000,
+kidnap_rate = (Kidnapping/TOT_POP)*100000,
+prostit_rate = (Prostitution/TOT_POP)*100000,
+human_traf_rate = (Human_traf/TOT_POP)*100000,
+deceptive_rate = (Deceptive_practice/TOT_POP)*100000)
+
+#add unemp lbfrc participation rates
+chi_2022 <- chi_2022 %>%
+mutate(unemp_rate = UNEMP/IN_LBFRC,
+lbfrc_participation = IN_LBFRC/(IN_LBFRC+NOT_IN_LBFRC))
+
+#graph of unemployment rates to violent crime rate for 2022 
+unemp_violent_2022_plot <- 
+ggplot(chi_2022,aes(x=unemp_rate, y=violent_rate)) +
+geom_point(aes(size=TOT_POP),color='maroon') +
+geom_smooth() +
+geom_hline(aes(yintercept=mean(violent_rate))) +
+labs(title='Unemployment vs Violent Crime Rates in Chicago Communities 2022',
+x='Unemployment Rate',
+y='Violent Crimes (per 100,000 people)',
+size = 'Community Population')
+
+#2021 comm snapshot to create chi_2021
+#clean comm_snapshot_21
+comm_snapshot_21 <- comm_snapshot_21 %>%
+mutate(GEOG = toupper(GEOG)) %>%
+mutate(GEOG = ifelse(GEOG=="O'HARE",'OHARE',GEOG)) %>%
+mutate(GEOG = ifelse(GEOG=='THE LOOP','LOOP',GEOG))
+
+#JOIN community snapshot and crimes by community for 2021 to create chi_2021 dataset
+chi_2021 <- community_crime_yr %>%
+filter(Year == 2021) %>%
+inner_join(comm_snapshot_21,by=c('COMMUNITY'='GEOG'))
+View(chi_2021)
+
+#add to chi_2021 data set
+chi_2021 <- chi_2021 %>%
+group_by(COMMUNITY) %>%
+mutate(crime_rate = ((Criminal_Damage + Battery + Robbery + Theft + Assaults+ Burglary + GTA + Narcotics + Weapons_violation + SA + Sex_Offense + Stalking + Homicide + Arson + Kidnapping + Prostitution + Human_traf + Deceptive_practice)/TOT_POP)*100000,
+violent_rate = (Violent/TOT_POP)*100000,
+crim_damage_rate = (Criminal_Damage/TOT_POP)*100000,
+battery_rate = (Battery/TOT_POP)*100000,
+robbery_rate = (Robbery/TOT_POP)*100000,
+theft_rate = (Theft/TOT_POP)*100000,
+assault_rate = (Assaults/TOT_POP)*100000,
+burglary_rate = (Burglary/TOT_POP)*100000,
+gta_rate = (GTA/TOT_POP)*100000,
+narcotics_rate = (Narcotics/TOT_POP)*100000,
+weapons_rate = (Weapons_violation/TOT_POP)*100000,
+sa_rate = (SA/TOT_POP)*100000,
+sex_off_rate = (Sex_Offense/TOT_POP)*100000,
+stalking_rate = (Stalking/TOT_POP)*100000,
+homicide_rate = (Homicide/TOT_POP)*100000,
+arson_rate = (Arson/TOT_POP)*100000,
+kidnap_rate = (Kidnapping/TOT_POP)*100000,
+prostit_rate = (Prostitution/TOT_POP)*100000,
+human_traf_rate = (Human_traf/TOT_POP)*100000,
+deceptive_rate = (Deceptive_practice/TOT_POP)*100000)
+
+#add unemp lbfrc participation rates
+chi_2021 <- chi_2021 %>%
+mutate(unemp_rate = UNEMP/IN_LBFRC,
+lbfrc_participation = IN_LBFRC/(IN_LBFRC+NOT_IN_LBFRC))
+
+#graph of unemployment rates to violent crime rate for 2021 
+unemp_violent_2021_plot <- 
+ggplot(chi_2021,aes(x=unemp_rate, y=violent_rate)) +
+geom_point(aes(size=TOT_POP),color='maroon') +
+geom_smooth() +
+geom_hline(aes(yintercept=mean(violent_rate))) +
+labs(title='Unemployment vs Violent Crime Rates in Chicago Communities 2021',
+x='Unemployment Rate',
+y='Violent Crimes (per 100,000 people)',
+size = 'Community Population')
+
+#^^FINISH JOING COMM SNAPSHOTS W/ community_crime_yr AND JOIN FINISHED chi_xxxx dataframes to get complete dataset
+
+#2020
+#2020 comm snapshot to create chi_2020
+#clean comm_snapshot_20
+comm_snapshot_20 <- comm_snapshot_20 %>%
+mutate(GEOG = toupper(GEOG)) %>%
+mutate(GEOG = ifelse(GEOG=="O'HARE",'OHARE',GEOG)) %>%
+mutate(GEOG = ifelse(GEOG=='THE LOOP','LOOP',GEOG))
+
+#JOIN community snapshot and crimes by community for 2020 to create chi_2020 dataset
+chi_2020 <- community_crime_yr %>%
+filter(Year == 2020) %>%
+inner_join(comm_snapshot_20,by=c('COMMUNITY'='GEOG'))
+View(chi_2020)
+
+#add to chi_2020 data set
+chi_2020 <- chi_2020 %>%
+group_by(COMMUNITY) %>%
+mutate(crime_rate = ((Criminal_Damage + Battery + Robbery + Theft + Assaults+ Burglary + GTA + Narcotics + Weapons_violation + SA + Sex_Offense + Stalking + Homicide + Arson + Kidnapping + Prostitution + Human_traf + Deceptive_practice)/TOT_POP)*100000,
+violent_rate = (Violent/TOT_POP)*100000,
+crim_damage_rate = (Criminal_Damage/TOT_POP)*100000,
+battery_rate = (Battery/TOT_POP)*100000,
+robbery_rate = (Robbery/TOT_POP)*100000,
+theft_rate = (Theft/TOT_POP)*100000,
+assault_rate = (Assaults/TOT_POP)*100000,
+burglary_rate = (Burglary/TOT_POP)*100000,
+gta_rate = (GTA/TOT_POP)*100000,
+narcotics_rate = (Narcotics/TOT_POP)*100000,
+weapons_rate = (Weapons_violation/TOT_POP)*100000,
+sa_rate = (SA/TOT_POP)*100000,
+sex_off_rate = (Sex_Offense/TOT_POP)*100000,
+stalking_rate = (Stalking/TOT_POP)*100000,
+homicide_rate = (Homicide/TOT_POP)*100000,
+arson_rate = (Arson/TOT_POP)*100000,
+kidnap_rate = (Kidnapping/TOT_POP)*100000,
+prostit_rate = (Prostitution/TOT_POP)*100000,
+human_traf_rate = (Human_traf/TOT_POP)*100000,
+deceptive_rate = (Deceptive_practice/TOT_POP)*100000)
+
+#add unemp lbfrc participation rates
+chi_2020 <- chi_2020 %>%
+mutate(unemp_rate = UNEMP/IN_LBFRC,
+lbfrc_participation = IN_LBFRC/(IN_LBFRC+NOT_IN_LBFRC))
+
+#graph of unemployment rates to violent crime rate for 2020 
+unemp_violent_2020_plot <- 
+ggplot(chi_2020,aes(x=unemp_rate, y=violent_rate)) +
+geom_point(aes(size=TOT_POP),color='maroon') +
+geom_smooth() +
+geom_hline(aes(yintercept=mean(violent_rate))) +
+labs(title='Unemployment vs Violent Crime Rates in Chicago Communities 2020',
+x='Unemployment Rate',
+y='Violent Crimes (per 100,000 people)',
+size = 'Community Population')
+
+#2019
+#2019 comm snapshot to create chi_2019
+#clean comm_snapshot_19
+comm_snapshot_19 <- comm_snapshot_19 %>%
+mutate(GEOG = toupper(GEOG)) %>%
+mutate(GEOG = ifelse(GEOG=="O'HARE",'OHARE',GEOG)) %>%
+mutate(GEOG = ifelse(GEOG=='THE LOOP','LOOP',GEOG))
+
+#JOIN community snapshot and crimes by community for 2019 to create chi_2019 dataset
+chi_2019 <- community_crime_yr %>%
+filter(Year == 2019) %>%
+inner_join(comm_snapshot_19,by=c('COMMUNITY'='GEOG'))
+View(chi_2019)
+
+#add to chi_2019 data set
+chi_2019 <- chi_2019 %>%
+group_by(COMMUNITY) %>%
+mutate(crime_rate = ((Criminal_Damage + Battery + Robbery + Theft + Assaults+ Burglary + GTA + Narcotics + Weapons_violation + SA + Sex_Offense + Stalking + Homicide + Arson + Kidnapping + Prostitution + Human_traf + Deceptive_practice)/TOT_POP)*100000,
+violent_rate = (Violent/TOT_POP)*100000,
+crim_damage_rate = (Criminal_Damage/TOT_POP)*100000,
+battery_rate = (Battery/TOT_POP)*100000,
+robbery_rate = (Robbery/TOT_POP)*100000,
+theft_rate = (Theft/TOT_POP)*100000,
+assault_rate = (Assaults/TOT_POP)*100000,
+burglary_rate = (Burglary/TOT_POP)*100000,
+gta_rate = (GTA/TOT_POP)*100000,
+narcotics_rate = (Narcotics/TOT_POP)*100000,
+weapons_rate = (Weapons_violation/TOT_POP)*100000,
+sa_rate = (SA/TOT_POP)*100000,
+sex_off_rate = (Sex_Offense/TOT_POP)*100000,
+stalking_rate = (Stalking/TOT_POP)*100000,
+homicide_rate = (Homicide/TOT_POP)*100000,
+arson_rate = (Arson/TOT_POP)*100000,
+kidnap_rate = (Kidnapping/TOT_POP)*100000,
+prostit_rate = (Prostitution/TOT_POP)*100000,
+human_traf_rate = (Human_traf/TOT_POP)*100000,
+deceptive_rate = (Deceptive_practice/TOT_POP)*100000)
+
+#add unemp lbfrc participation rates
+chi_2019 <- chi_2019 %>%
+mutate(unemp_rate = UNEMP/IN_LBFRC,
+lbfrc_participation = IN_LBFRC/(IN_LBFRC+NOT_IN_LBFRC))
+
+#graph of unemployment rates to violent crime rate for 2019 
+unemp_violent_2019_plot <- 
+ggplot(chi_2019,aes(x=unemp_rate, y=violent_rate)) +
+geom_point(aes(size=TOT_POP),color='maroon') +
+geom_smooth() +
+geom_hline(aes(yintercept=mean(violent_rate))) +
+labs(title='Unemployment vs Violent Crime Rates in Chicago Communities 2019',
+x='Unemployment Rate',
+y='Violent Crimes (per 100,000 people)',
+size = 'Community Population')
+
+#2018
+#2018 comm snapshot to create chi_2018
+#clean comm_snapshot_18
+comm_snapshot_18 <- comm_snapshot_18 %>%
+mutate(GEOG = toupper(GEOG)) %>%
+mutate(GEOG = ifelse(GEOG=="O'HARE",'OHARE',GEOG)) %>%
+mutate(GEOG = ifelse(GEOG=='THE LOOP','LOOP',GEOG))
+
+#JOIN community snapshot and crimes by community for 2018 to create chi_2018 dataset
+chi_2018 <- community_crime_yr %>%
+filter(Year == 2018) %>%
+inner_join(comm_snapshot_18,by=c('COMMUNITY'='GEOG'))
+View(chi_2018)
+
+#add to chi_2018 data set
+chi_2018 <- chi_2018 %>%
+group_by(COMMUNITY) %>%
+mutate(crime_rate = ((Criminal_Damage + Battery + Robbery + Theft + Assaults+ Burglary + GTA + Narcotics + Weapons_violation + SA + Sex_Offense + Stalking + Homicide + Arson + Kidnapping + Prostitution + Human_traf + Deceptive_practice)/TOT_POP)*100000,
+violent_rate = (Violent/TOT_POP)*100000,
+crim_damage_rate = (Criminal_Damage/TOT_POP)*100000,
+battery_rate = (Battery/TOT_POP)*100000,
+robbery_rate = (Robbery/TOT_POP)*100000,
+theft_rate = (Theft/TOT_POP)*100000,
+assault_rate = (Assaults/TOT_POP)*100000,
+burglary_rate = (Burglary/TOT_POP)*100000,
+gta_rate = (GTA/TOT_POP)*100000,
+narcotics_rate = (Narcotics/TOT_POP)*100000,
+weapons_rate = (Weapons_violation/TOT_POP)*100000,
+sa_rate = (SA/TOT_POP)*100000,
+sex_off_rate = (Sex_Offense/TOT_POP)*100000,
+stalking_rate = (Stalking/TOT_POP)*100000,
+homicide_rate = (Homicide/TOT_POP)*100000,
+arson_rate = (Arson/TOT_POP)*100000,
+kidnap_rate = (Kidnapping/TOT_POP)*100000,
+prostit_rate = (Prostitution/TOT_POP)*100000,
+human_traf_rate = (Human_traf/TOT_POP)*100000,
+deceptive_rate = (Deceptive_practice/TOT_POP)*100000)
+
+#add unemp lbfrc participation rates
+chi_2018 <- chi_2018 %>%
+mutate(unemp_rate = UNEMP/IN_LBFRC,
+lbfrc_participation = IN_LBFRC/(IN_LBFRC+NOT_IN_LBFRC))
+
+#graph of unemployment rates to violent crime rate for 2018 
+unemp_violent_2018_plot <- 
+ggplot(chi_2018,aes(x=unemp_rate, y=violent_rate)) +
+geom_point(aes(size=TOT_POP),color='maroon') +
+geom_smooth() +
+geom_hline(aes(yintercept=mean(violent_rate))) +
+labs(title='Unemployment vs Violent Crime Rates in Chicago Communities 2018',
+x='Unemployment Rate',
+y='Violent Crimes (per 100,000 people)',
+size = 'Community Population')
+
+#2017
+#2017 comm snapshot to create chi_2017
+#clean comm_snapshot_17
+comm_snapshot_17 <- comm_snapshot_17 %>%
+mutate(GEOG = toupper(GEOG)) %>%
+mutate(GEOG = ifelse(GEOG=="O'HARE",'OHARE',GEOG)) %>%
+mutate(GEOG = ifelse(GEOG=='THE LOOP','LOOP',GEOG))
+
+#JOIN community snapshot and crimes by community for 2017 to create chi_2017 dataset
+chi_2017 <- community_crime_yr %>%
+filter(Year == 2017) %>%
+inner_join(comm_snapshot_17,by=c('COMMUNITY'='GEOG'))
+View(chi_2017)
+
+#add to chi_2017 data set
+chi_2017 <- chi_2017 %>%
+group_by(COMMUNITY) %>%
+mutate(crime_rate = ((Criminal_Damage + Battery + Robbery + Theft + Assaults+ Burglary + GTA + Narcotics + Weapons_violation + SA + Sex_Offense + Stalking + Homicide + Arson + Kidnapping + Prostitution + Human_traf + Deceptive_practice)/TOT_POP)*100000,
+violent_rate = (Violent/TOT_POP)*100000,
+crim_damage_rate = (Criminal_Damage/TOT_POP)*100000,
+battery_rate = (Battery/TOT_POP)*100000,
+robbery_rate = (Robbery/TOT_POP)*100000,
+theft_rate = (Theft/TOT_POP)*100000,
+assault_rate = (Assaults/TOT_POP)*100000,
+burglary_rate = (Burglary/TOT_POP)*100000,
+gta_rate = (GTA/TOT_POP)*100000,
+narcotics_rate = (Narcotics/TOT_POP)*100000,
+weapons_rate = (Weapons_violation/TOT_POP)*100000,
+sa_rate = (SA/TOT_POP)*100000,
+sex_off_rate = (Sex_Offense/TOT_POP)*100000,
+stalking_rate = (Stalking/TOT_POP)*100000,
+homicide_rate = (Homicide/TOT_POP)*100000,
+arson_rate = (Arson/TOT_POP)*100000,
+kidnap_rate = (Kidnapping/TOT_POP)*100000,
+prostit_rate = (Prostitution/TOT_POP)*100000,
+human_traf_rate = (Human_traf/TOT_POP)*100000,
+deceptive_rate = (Deceptive_practice/TOT_POP)*100000)
+
+#add unemp lbfrc participation rates
+chi_2017 <- chi_2017 %>%
+mutate(unemp_rate = UNEMP/IN_LBFRC,
+lbfrc_participation = IN_LBFRC/(IN_LBFRC+NOT_IN_LBFRC))
+
+#graph of unemployment rates to violent crime rate for 2017 
+unemp_violent_2017_plot <- 
+ggplot(chi_2017,aes(x=unemp_rate, y=violent_rate)) +
+geom_point(aes(size=TOT_POP),color='maroon') +
+geom_smooth() +
+geom_hline(aes(yintercept=mean(violent_rate))) +
+labs(title='Unemployment vs Violent Crime Rates in Chicago Communities 2017',
+x='Unemployment Rate',
+y='Violent Crimes (per 100,000 people)',
+size = 'Community Population')
+
+#2016
+#2016 comm snapshot to create chi_2016
+#clean comm_snapshot_16
+comm_snapshot_16 <- comm_snapshot_16 %>%
+mutate(GEOG = toupper(GEOG)) %>%
+mutate(GEOG = ifelse(GEOG=="O'HARE",'OHARE',GEOG)) %>%
+mutate(GEOG = ifelse(GEOG=='THE LOOP','LOOP',GEOG))
+
+#JOIN community snapshot and crimes by community for 2016 to create chi_2016 dataset
+chi_2016 <- community_crime_yr %>%
+filter(Year == 2016) %>%
+inner_join(comm_snapshot_16,by=c('COMMUNITY'='GEOG'))
+View(chi_2016)
+
+#add to chi_2016 data set
+chi_2016 <- chi_2016 %>%
+group_by(COMMUNITY) %>%
+mutate(crime_rate = ((Criminal_Damage + Battery + Robbery + Theft + Assaults+ Burglary + GTA + Narcotics + Weapons_violation + SA + Sex_Offense + Stalking + Homicide + Arson + Kidnapping + Prostitution + Human_traf + Deceptive_practice)/TOT_POP)*100000,
+violent_rate = (Violent/TOT_POP)*100000,
+crim_damage_rate = (Criminal_Damage/TOT_POP)*100000,
+battery_rate = (Battery/TOT_POP)*100000,
+robbery_rate = (Robbery/TOT_POP)*100000,
+theft_rate = (Theft/TOT_POP)*100000,
+assault_rate = (Assaults/TOT_POP)*100000,
+burglary_rate = (Burglary/TOT_POP)*100000,
+gta_rate = (GTA/TOT_POP)*100000,
+narcotics_rate = (Narcotics/TOT_POP)*100000,
+weapons_rate = (Weapons_violation/TOT_POP)*100000,
+sa_rate = (SA/TOT_POP)*100000,
+sex_off_rate = (Sex_Offense/TOT_POP)*100000,
+stalking_rate = (Stalking/TOT_POP)*100000,
+homicide_rate = (Homicide/TOT_POP)*100000,
+arson_rate = (Arson/TOT_POP)*100000,
+kidnap_rate = (Kidnapping/TOT_POP)*100000,
+prostit_rate = (Prostitution/TOT_POP)*100000,
+human_traf_rate = (Human_traf/TOT_POP)*100000,
+deceptive_rate = (Deceptive_practice/TOT_POP)*100000)
+
+#add unemp lbfrc participation rates
+chi_2016 <- chi_2016 %>%
+mutate(unemp_rate = UNEMP/IN_LBFRC,
+lbfrc_participation = IN_LBFRC/(IN_LBFRC+NOT_IN_LBFRC))
+
+#graph of unemployment rates to violent crime rate for 2016 
+unemp_violent_2016_plot <- 
+ggplot(chi_2016,aes(x=unemp_rate, y=violent_rate)) +
+geom_point(aes(size=TOT_POP),color='maroon') +
+geom_smooth() +
+geom_hline(aes(yintercept=mean(violent_rate))) +
+labs(title='Unemployment vs Violent Crime Rates in Chicago Communities 2016',
+x='Unemployment Rate',
+y='Violent Crimes (per 100,000 people)',
+size = 'Community Population')
+
+#2015
+#2015 comm snapshot to create chi_2015
+#clean comm_snapshot_15
+comm_snapshot_15 <- comm_snapshot_15 %>%
+mutate(CCA = toupper(CCA)) %>%
+mutate(CCA = ifelse(CCA=="O'HARE",'OHARE',CCA)) %>%
+mutate(CCA = ifelse(CCA=='THE LOOP','LOOP',CCA))
+
+#JOIN community snapshot and crimes by community for 2015 to create chi_2015 dataset
+chi_2015 <- community_crime_yr %>%
+filter(Year == 2015) %>%
+inner_join(comm_snapshot_15,by=c('COMMUNITY'='CCA'))
+View(chi_2015)
+
+#add to chi_2015 data set
+chi_2015 <- chi_2015 %>%
+group_by(COMMUNITY) %>%
+mutate(crime_rate = ((Criminal_Damage + Battery + Robbery + Theft + Assaults+ Burglary + GTA + Narcotics + Weapons_violation + SA + Sex_Offense + Stalking + Homicide + Arson + Kidnapping + Prostitution + Human_traf + Deceptive_practice)/TOT_POP)*100000,
+violent_rate = (Violent/TOT_POP)*100000,
+crim_damage_rate = (Criminal_Damage/TOT_POP)*100000,
+battery_rate = (Battery/TOT_POP)*100000,
+robbery_rate = (Robbery/TOT_POP)*100000,
+theft_rate = (Theft/TOT_POP)*100000,
+assault_rate = (Assaults/TOT_POP)*100000,
+burglary_rate = (Burglary/TOT_POP)*100000,
+gta_rate = (GTA/TOT_POP)*100000,
+narcotics_rate = (Narcotics/TOT_POP)*100000,
+weapons_rate = (Weapons_violation/TOT_POP)*100000,
+sa_rate = (SA/TOT_POP)*100000,
+sex_off_rate = (Sex_Offense/TOT_POP)*100000,
+stalking_rate = (Stalking/TOT_POP)*100000,
+homicide_rate = (Homicide/TOT_POP)*100000,
+arson_rate = (Arson/TOT_POP)*100000,
+kidnap_rate = (Kidnapping/TOT_POP)*100000,
+prostit_rate = (Prostitution/TOT_POP)*100000,
+human_traf_rate = (Human_traf/TOT_POP)*100000,
+deceptive_rate = (Deceptive_practice/TOT_POP)*100000)
+
+#add unemp lbfrc participation rates
+chi_2015 <- chi_2015 %>%
+mutate(unemp_rate = UNEMP/IN_LBFRC,
+lbfrc_participation = IN_LBFRC/(IN_LBFRC+NOT_IN_LBFRC))
+
+#graph of unemployment rates to violent crime rate for 2015 
+unemp_violent_2015_plot <- 
+ggplot(chi_2015,aes(x=unemp_rate, y=violent_rate)) +
+geom_point(aes(size=TOT_POP),color='maroon') +
+geom_smooth() +
+geom_hline(aes(yintercept=mean(violent_rate))) +
+labs(title='Unemployment vs Violent Crime Rates in Chicago Communities 2015',
+x='Unemployment Rate',
+y='Violent Crimes (per 100,000 people)',
+size = 'Community Population')
+
+#JOIN chi_xxxx datasets to get yearly community area data
+#select necessary columns for union
+col_of_interest_23 <- chi_2023 %>%
+mutate(UND19 = UND5 + A5_19,
+OV65 = A65_74 + A75_84 + OV85) %>%
+select(c(COMMUNITY, Year, TOT_POP, unemp_rate, IN_LBFRC, NOT_IN_LBFRC, crime_rate, violent_rate, homicide_rate, battery_rate, robbery_rate, assault_rate, theft_rate, burglary_rate, narcotics_rate, weapons_rate, HS, BACH, INC_LT_25K, INC_25_50K, INC_50_75K, INC_75_100K, INC_100_150K, INC_GT_150, MEDINC, OWN_OCC_HU, RENT_OCC_HU, VAC_HU, UND19, A20_34, A35_49, A50_64, OV65, MED_AGE, WORK_NAICS1_TYPE, WORK_NAICS2_TYPE, WORK_NAICS3_TYPE, WORK_NAICS4_TYPE, WORK_NAICS5_TYPE, WORK_NAICS1_COUNT, WORK_NAICS2_COUNT, WORK_NAICS3_COUNT, WORK_NAICS4_COUNT, WORK_NAICS5_COUNT))
+
+col_of_interest_22 <- chi_2022 %>%
+mutate(UND19 = UND5 + A5_19,
+OV65 = A65_74 + A75_84 + OV85) %>%
+select(c(COMMUNITY, Year, TOT_POP, unemp_rate, IN_LBFRC, NOT_IN_LBFRC, crime_rate, violent_rate, homicide_rate, battery_rate, robbery_rate, assault_rate, theft_rate, burglary_rate, narcotics_rate, weapons_rate, HS, BACH, INC_LT_25K, INC_25_50K, INC_50_75K, INC_75_100K, INC_100_150K, INC_GT_150, MEDINC, OWN_OCC_HU, RENT_OCC_HU, VAC_HU, UND19, A20_34, A35_49, A50_64, OV65, MED_AGE, WORK_NAICS1_TYPE, WORK_NAICS2_TYPE, WORK_NAICS3_TYPE, WORK_NAICS4_TYPE, WORK_NAICS5_TYPE, WORK_NAICS1_COUNT, WORK_NAICS2_COUNT, WORK_NAICS3_COUNT, WORK_NAICS4_COUNT, WORK_NAICS5_COUNT))
+
+col_of_interest_21 <- chi_2021 %>%
+mutate(OV65 = A65_74 + A75_84 + OV85) %>%
+select(c(COMMUNITY, Year, TOT_POP, unemp_rate, IN_LBFRC, NOT_IN_LBFRC, crime_rate, violent_rate, homicide_rate, battery_rate, robbery_rate, assault_rate, theft_rate, burglary_rate, narcotics_rate, weapons_rate, HS, BACH, INC_LT_25K, INC_25_50K, INC_50_75K, INC_75_100K, INC_100_150K, INC_GT_150, MEDINC, OWN_OCC_HU, RENT_OCC_HU, VAC_HU, UND19, A20_34, A35_49, A50_64, OV65, MED_AGE, WORK_NAICS1_TYPE, WORK_NAICS2_TYPE, WORK_NAICS3_TYPE, WORK_NAICS4_TYPE, WORK_NAICS5_TYPE, WORK_NAICS1_COUNT, WORK_NAICS2_COUNT, WORK_NAICS3_COUNT, WORK_NAICS4_COUNT, WORK_NAICS5_COUNT))
+
+col_of_interest_20 <- chi_2020 %>%
+mutate(UND19 = UND5 + A5_19,
+OV65 = A65_74 + A75_84 + OV85) %>%
+select(c(COMMUNITY, Year, TOT_POP, unemp_rate, IN_LBFRC, NOT_IN_LBFRC, crime_rate, violent_rate, homicide_rate, battery_rate, robbery_rate, assault_rate, theft_rate, burglary_rate, narcotics_rate, weapons_rate, HS, BACH, INC_LT_25K, INC_25_50K, INC_50_75K, INC_75_100K, INC_100_150K, INC_GT_150, MEDINC, OWN_OCC_HU, RENT_OCC_HU, VAC_HU, UND19, A20_34, A35_49, A50_64, OV65, MED_AGE, WORK_NAICS1_TYPE, WORK_NAICS2_TYPE, WORK_NAICS3_TYPE, WORK_NAICS4_TYPE, WORK_NAICS5_TYPE, WORK_NAICS1_COUNT, WORK_NAICS2_COUNT, WORK_NAICS3_COUNT, WORK_NAICS4_COUNT, WORK_NAICS5_COUNT))
+
+col_of_interest_19 <- chi_2019 %>%
+mutate(OV65 = A65_74 + A75_84 + OV85) %>%
+select(c(COMMUNITY, Year, TOT_POP, unemp_rate, IN_LBFRC, NOT_IN_LBFRC, crime_rate, violent_rate, homicide_rate, battery_rate, robbery_rate, assault_rate, theft_rate, burglary_rate, narcotics_rate, weapons_rate, HS, BACH, INC_LT_25K, INC_25_50K, INC_50_75K, INC_75_100K, INC_100_150K, INC_GT_150, MEDINC, OWN_OCC_HU, RENT_OCC_HU, VAC_HU, UND19, A20_34, A35_49, A50_64, OV65, MED_AGE, WORK_NAICS1_TYPE, WORK_NAICS2_TYPE, WORK_NAICS3_TYPE, WORK_NAICS4_TYPE, WORK_NAICS5_TYPE, WORK_NAICS1_COUNT, WORK_NAICS2_COUNT, WORK_NAICS3_COUNT, WORK_NAICS4_COUNT, WORK_NAICS5_COUNT))
+
+col_of_interest_18 <- chi_2018 %>%
+mutate(OV65 = A65_74 + A75_84 + OV85) %>%
+select(c(COMMUNITY, Year, TOT_POP, unemp_rate, IN_LBFRC, NOT_IN_LBFRC, crime_rate, violent_rate, homicide_rate, battery_rate, robbery_rate, assault_rate, theft_rate, burglary_rate, narcotics_rate, weapons_rate, HS, BACH, INC_LT_25K, INC_25_50K, INC_50_75K, INC_75_100K, INC_100_150K, INC_GT_150, MEDINC, OWN_OCC_HU, RENT_OCC_HU, VAC_HU, UND19, A20_34, A35_49, A50_64, OV65, MED_AGE, WORK_NAICS1_TYPE, WORK_NAICS2_TYPE, WORK_NAICS3_TYPE, WORK_NAICS4_TYPE, WORK_NAICS5_TYPE, WORK_NAICS1_COUNT, WORK_NAICS2_COUNT, WORK_NAICS3_COUNT, WORK_NAICS4_COUNT, WORK_NAICS5_COUNT))
+
+col_of_interest_17 <- chi_2017 %>%
+mutate(OV65 = A65_79 + OV80) %>%
+select(c(COMMUNITY, Year, TOT_POP, unemp_rate, IN_LBFRC, NOT_IN_LBFRC, crime_rate, violent_rate, homicide_rate, battery_rate, robbery_rate, assault_rate, theft_rate, burglary_rate, narcotics_rate, weapons_rate, HS, BACH, INC_LT_25K, INC_25_50K, INC_50_75K, INC_75_100K, INC_100_150K, INC_GT_150, MEDINC, OWN_OCC_HU, RENT_OCC_HU, VAC_HU, UND19, A20_34, A35_49, A50_64, OV65, MED_AGE, WORK_NAICS1_TYPE, WORK_NAICS2_TYPE, WORK_NAICS3_TYPE, WORK_NAICS4_TYPE, WORK_NAICS5_TYPE, WORK_NAICS1_COUNT, WORK_NAICS2_COUNT, WORK_NAICS3_COUNT, WORK_NAICS4_COUNT, WORK_NAICS5_COUNT))
+
+col_of_interest_16 <- chi_2016 %>%
+mutate(OV65 = A65_79 + OV80) %>%
+select(c(COMMUNITY, Year, TOT_POP, unemp_rate, IN_LBFRC, NOT_IN_LBFRC, crime_rate, violent_rate, homicide_rate, battery_rate, robbery_rate, assault_rate, theft_rate, burglary_rate, narcotics_rate, weapons_rate, HS, BACH, INC_LT_25K, INC_25_50K, INC_50_75K, INC_75_100K, INC_100_150K, INC_GT_150, MEDINC, OWN_OCC_HU, RENT_OCC_HU, VAC_HU, UND19, A20_34, A35_49, A50_64, OV65, MED_AGE, WORK_NAICS1_TYPE, WORK_NAICS2_TYPE, WORK_NAICS3_TYPE, WORK_NAICS4_TYPE, WORK_NAICS5_TYPE, WORK_NAICS1_COUNT, WORK_NAICS2_COUNT, WORK_NAICS3_COUNT, WORK_NAICS4_COUNT, WORK_NAICS5_COUNT))
+
+col_of_interest_15 <- chi_2015 %>%
+mutate(OV65 = A65_79 + OV80) %>%
+rename(MEDINC = MED_INC) %>%
+select(c(COMMUNITY, Year, TOT_POP, unemp_rate, IN_LBFRC, NOT_IN_LBFRC, crime_rate, violent_rate, homicide_rate, battery_rate, robbery_rate, assault_rate, theft_rate, burglary_rate, narcotics_rate, weapons_rate, HS, BACH, INC_LT_25K, INC_25_50K, INC_50_75K, INC_75_100K, INC_100_150K, INC_GT_150, MEDINC, OWN_OCC_HU, RENT_OCC_HU, VAC_HU, UND19, A20_34, A35_49, A50_64, OV65, MED_AGE, WORK_NAICS1_TYPE, WORK_NAICS2_TYPE, WORK_NAICS3_TYPE, WORK_NAICS4_TYPE, WORK_NAICS5_TYPE, WORK_NAICS1_COUNT, WORK_NAICS2_COUNT, WORK_NAICS3_COUNT, WORK_NAICS4_COUNT, WORK_NAICS5_COUNT))
+
+#union all col_of_interst_yr dataframes (CREATION OF chi_yearly DATASET)
+chi_yearly <- bind_rows(
+col_of_interest_23,
+col_of_interest_22,
+col_of_interest_21,
+col_of_interest_20,
+col_of_interest_19,
+col_of_interest_18,
+col_of_interest_17,
+col_of_interest_16,
+col_of_interest_15
+) %>%
+arrange(COMMUNITY,Year)
+
+#estimate total jobs by summing top 5 industry positions
+chi_yearly <- chi_yearly %>%
+mutate(TOT_JOBS = WORK_NAICS1_COUNT + WORK_NAICS2_COUNT + WORK_NAICS3_COUNT + WORK_NAICS4_COUNT + WORK_NAICS5_COUNT,
+JOBS_TO_POP= TOT_JOBS/TOT_POP)
+
+#plot total jobs to POP relative to MEDINC and unemp
+ggplot(chi_yearly,aes(x=JOBS_TO_POP,y=unemp_rate)) +
+geom_point() +
+geom_smooth()
+
+#chi_yearly PLOTS
+#Yearly Unemployment; unemp_yearly
+unemp_yearly_plot <- chi_yearly %>%
+ggplot(aes(x=Year,y=unemp_rate)) +
+geom_boxplot(aes(group=Year)) +
+geom_point(data = (
+chi_yearly %>%
+group_by(Year) %>%
+summarize(unemp_rate=weighted.mean(unemp_rate,TOT_POP))),
+color='red', fill='red',shape = 23) +
+labs(title='Unemployment in Chicago communities from 2015-2023',
+x='Year',
+y='Unemployment rate')
+
+unemp_yearly <- chi_yearly %>%
+group_by(Year) %>%
+summarize(unemp_rate=weighted.mean(unemp_rate,TOT_POP)) %>%
+arrange(Year)
+
+#Yearly violent crimes w/summary table to support
+violent_yearly_plot <- chi_yearly %>%
+ggplot() +
+geom_boxplot(aes(x=Year,y=violent_rate,group=Year)) +
+geom_point(data = (
+chi_yearly %>%
+group_by(Year) %>%
+summarize(violent_rate = weighted.mean(violent_rate,TOT_POP))),
+aes(x=Year,y=violent_rate),
+color='red', fill='red',shape=23) +
+labs(title='Violent crime in Chicago communities 2015-2023',
+y='Violent crime rate (per 100,000 people)')
+
+violent_yearly <- chi_yearly %>%
+group_by(Year) %>%
+summarize(violent_rate = weighted.mean(violent_rate,TOT_POP)) %>%
+arrange(Year)
+
+#Unemployment and violent crimes, using log since it improves heteroskedasticity
+#filtered data for labels
+filter_chi_yearly <- chi_yearly %>%
+filter(violent_rate>=2750) %>%
+select(COMMUNITY,violent_rate)
+
+log_unemp_vio_plot <- ggplot(data=chi_yearly,aes(x=log(unemp_rate),y=violent_rate)) +
+geom_point(aes(color=Year)) +
+geom_smooth(formula = y ~ x) +
+labs(title='Unemployment Rate vs. Violent Crime Rate in Chicago from 2015-2023',
+x='Natural Logarithm of Unemployment rate',
+y='Violent crime rate')
+
+unemp_vio_plot <- chi_yearly %>%
+ggplot(aes(x=unemp_rate,y=violent_rate)) +
+geom_point(aes(color=Year)) +
+geom_smooth(method=lm,formula = y ~ log(x)) +
+coord_cartesian(ylim=c(0,max(chi_yearly$violent_rate))) +
+labs(title='Unemployment Rate vs. Violent Crime Rate in Chicago from 2015-2023',
+x='Unemployment rate',
+y='Violent crime rate (per 100,000 people)')
+
+#Median income
+med_inc_plot <- chi_yearly %>%
+group_by(Year) %>%
+summarize(MEDINC = weighted.mean(MEDINC,TOT_POP)) %>%
+ggplot(aes(x=Year,y=MEDINC)) +
+geom_line(color='blue') +
+labs(title='Median Income in Chicago from 2015-2023',
+x='Year',
+y='Median income')
+
+#job_growth plot
+#create 5 data sets for each NAICS category to join by WORK_TYPE
+WORK_1 <- chi_yearly %>%
+select(COMMUNITY,Year,WORK_NAICS1_TYPE,WORK_NAICS1_COUNT) %>%
+rename(WORK_TYPE = WORK_NAICS1_TYPE,WORK_COUNT = WORK_NAICS1_COUNT)
+
+WORK_2 <- chi_yearly %>%
+select(COMMUNITY,Year,WORK_NAICS2_TYPE,WORK_NAICS2_COUNT) %>%
+rename(WORK_TYPE = WORK_NAICS2_TYPE,WORK_COUNT = WORK_NAICS2_COUNT)
+
+WORK_3 <- chi_yearly %>%
+select(COMMUNITY,Year,WORK_NAICS3_TYPE,WORK_NAICS3_COUNT) %>%
+rename(WORK_TYPE = WORK_NAICS3_TYPE,WORK_COUNT = WORK_NAICS3_COUNT)
+
+WORK_4 <- chi_yearly %>%
+select(COMMUNITY,Year,WORK_NAICS4_TYPE,WORK_NAICS4_COUNT) %>%
+rename(WORK_TYPE = WORK_NAICS4_TYPE,WORK_COUNT = WORK_NAICS4_COUNT)
+
+WORK_5 <- chi_yearly %>%
+select(COMMUNITY,Year,WORK_NAICS5_TYPE,WORK_NAICS5_COUNT) %>%
+rename(WORK_TYPE = WORK_NAICS5_TYPE,WORK_COUNT = WORK_NAICS5_COUNT)
+
+#bind by WORK_TYPE
+job_yearly <- bind_rows(
+WORK_1,
+WORK_2,
+WORK_3,
+WORK_4,
+WORK_5
+) %>%
+arrange(COMMUNITY,Year)
+
+#job plot w/ summary table for support, use to investigate WORK_TYPE for jobs in different communities/growth by year
+job_plot_type <- job_type_sum %>%
+filter(COUNT>=25000) %>%
+ggplot(aes(x=Year,y=COUNT)) +
+geom_line(aes(group=WORK_TYPE,color=WORK_TYPE)) +
+labs(title='Number of jobs by industry type in Chicago communities 2015-2023') +
+guides(color = guide_legend(title='Job industry')) +
+scale_color_discrete(breaks=c("Professional", "Health Care", "Education", "Administration", "Finance", "Accommodation and Food Service", "Retail Trade", "Public Administration", "Transportation", "Median", "Manufacturing", "Wholesale Trade", "Other Service", "Arts and Entertainment", "Construction", "Real Estate", "Utilities", "Information", "Management"))
+
+#legend_order for job plot
+legend_order <- as.factor(job_type_sum %>% group_by(WORK_TYPE) %>% filter(Year == 2023) %>% arrange(desc(COUNT)) %>% select(WORK_TYPE))
+
+job_plot_tot <- job_year_sum %>%
+ggplot(aes(x=Year,y=COUNT)) +
+geom_line(color='blue') +
+labs(title='Total jobs in Chicago communities 2015-2023')
+
+job_type_sum <- job_yearly %>%
+group_by(Year,WORK_TYPE) %>%
+summarize(COUNT = sum(WORK_COUNT)) %>%
+bind_rows((job_type_sum %>%
+group_by(Year) %>%
+summarize(COUNT = median(COUNT)) %>%
+mutate(WORK_TYPE = 'Median'))) %>% 
+arrange(Year)
+
+job_year_sum <- job_yearly %>%
+group_by(Year) %>%
+summarize(COUNT = sum(WORK_COUNT))
+
+#Community %change in jobs year to year
+job_growth_comm <- job_yearly %>%
+group_by(COMMUNITY,Year) %>%
+summarize(COUNT = sum(WORK_COUNT)) %>%
+unique() %>%
+mutate(growth_rt_pct = round((COUNT - lag(COUNT))/lag(COUNT)*100,digits=2)) %>%
+rename(tot_jobs = COUNT)
+
+#chicago job growth
+job_growth_plot <- job_growth_comm %>%
+group_by(Year) %>%
+summarize(mean_growth_rt = weighted.mean(growth_rt_pct,tot_jobs)) %>%
+ggplot(aes(x=Year,y=mean_growth_rt)) +
+geom_line()
+
+#join growth rate with chi_yearly
+chi_yearly <- chi_yearly %>%
+left_join(job_growth_comm,
+by=c('COMMUNITY','Year','TOT_JOBS'='tot_jobs'))
+
+chi_yearly <- chi_yearly %>%
+rename(job_growth_pct = growth_rt_pct)
+
+#updated POOLED OLS model using chi_yearly dataset (w/ city-based heterogeneity)
+pooled_unemp_lm <- lm(violent_rate ~ log(unemp_rate) + factor(Year), chi_yearly)
+
+summary(pooled_unemp_lm)
+
+plot(chi_yearly$unemp_rate,chi_yearly$violent_rate)
+plot(log(chi_yearly$unemp_rate),chi_yearly$violent_rate)
+
+#show that error and model explanatory variables are uncorrelated, avoiding endogeneity
+cov(chi_yearly$unemp_rate,residuals(pooled_unemp_lm))
+
+#ADD REGIONS IN, WHAT AREAS OF THE CITY ARE SEEING MORE VS. LESS GROWTH? GROWTH BY RACIAL MAKEUP?
+CCA_REGION <- read_csv("Chicago Crime Portfolio Project/CCA REGION.csv")
+
+CCA_REGION <- CCA_REGION %>%
+select(c(COMMUNITY,REGION)) %>%
+mutate(REGION = (substr(REGION,1,nchar(REGION)-5))) %>%
+mutate(REGION = ifelse(REGION=='Ce','Central',REGION))
+
+chi_yearly <- chi_yearly %>%
+left_join(CCA_REGION,by='COMMUNITY')
+
+#region violent rate plot
+chi_yearly %>%
+ggplot(aes(x=REGION,y=violent_rate)) +
+geom_boxplot(aes(color=REGION))
+
+#safest and most dangerous communities
+#most dangerous...
+top_violent_sum <- chi_yearly %>%
+group_by(COMMUNITY) %>%
+summarize(max = max(violent_rate),TOT_POP = mean(TOT_POP),UND_19_PCT=mean(UND19)/mean(TOT_POP), A20_34_PCT=mean(A20_34)/mean(TOT_POP))  %>%
+arrange(desc(max))
+
+top_violent_CCA <- chi_yearly %>%
+group_by(COMMUNITY) %>%
+summarize(max = max(violent_rate),TOT_POP = mean(TOT_POP),UND_19_PCT=mean(UND19)/mean(TOT_POP), A20_34_PCT=mean(A20_34)/mean(TOT_POP))  %>%
+arrange(desc(max)) %>%
+filter(max >= 3500) %>%
+select(COMMUNITY)
+
+most_violent_plot <- chi_yearly %>%
+filter(COMMUNITY %in% top_violent_CCA$COMMUNITY) %>%
+ggplot(aes(x=Year,y=violent_rate,
+color=fct_reorder(COMMUNITY,violent_rate,.desc=TRUE))) +
+geom_line() +
+labs(title='Chicago communities with the most violent crime 2015-2023',
+y = 'Violent crime rate (per 100,000)',
+color='Community')
+
+#least dangerous
+least_violent_sum <- chi_yearly %>%
+group_by(COMMUNITY) %>%
+summarize(min = min(violent_rate),TOT_POP = mean(TOT_POP),UND_19_PCT=mean(UND19)/mean(TOT_POP), A20_34_PCT=mean(A20_34)/mean(TOT_POP))  %>%
+arrange((min))
+
+least_violent_CCA <- chi_yearly %>%
+group_by(COMMUNITY) %>%
+summarize(min = min(violent_rate),TOT_POP = mean(TOT_POP),UND_19_PCT=mean(UND19)/mean(TOT_POP), A20_34_PCT=mean(A20_34)/mean(TOT_POP))  %>%
+arrange(desc(min)) %>%
+filter(min <= 1000) %>%
+select(COMMUNITY)
+
+#MODELING & ANALYSIS
+
+#show heterogeneity in REGION/COMMUNITY observations; WEST SIDE IS HEAVILY EFFECTED
+summary(lm(violent_rate ~ factor(REGION),chi_yearly))
+
+plotmeans(violent_rate ~ COMMUNITY,main='Heterogeneity across communities',data=chi_yearly)
+
+#However, each region shows a decrease in expected violent_rate when REGION DV introduced:
+summary(lm(violent_rate ~ log(unemp_rate) + factor(Year) + factor(REGION),chi_yearly))
+
+#Could it have something to do with covariation between unemployment and REGION specific factors? Seems like there is a significant association between Region specific effects and the unemployment rate, thereby indicating multiple collinearity btw ind. variables
+summary(lm(unemp_rate ~ factor(REGION),chi_yearly))
+
+#DV approach to unobserved heterogeneity; unemp_rate effect is measured as negative, suggesting a 1% increase in unemp_rate is associated with a decrease of 1 violent crime/100,000 people; using lags tell a similar story
+dv <- plm(violent_rate ~ log(unemp_rate), data = chi_yearly, index=c('COMMUNITY','Year'),model='within')
+
+summary(dv)
+
+#suggesting bias in the data either due to underlying distribution (heteroskedasticity) or omitted variables
+plot(log(chi_yearly$unemp_rate),residuals(dv))
+
+#first differences and fixed effects models to prevent community-specific heterogeneity potentially biasing and causing inconsistency
+
+#demeaned model
+chi_yearly <- chi_yearly %>%
+group_by(COMMUNITY) %>%
+mutate(unemp_demeaned = unemp_rate-mean(unemp_rate),
+violent_demeaned = violent_rate - mean(violent_rate))
+
+fe_model <- lm(violent_demeaned ~ unemp_demeaned + factor(Year),chi_yearly)
+
+summary(fe_model)
+
+#fixed effects plot fe_plot
+fe_plot <- chi_yearly %>%
+filter(COMMUNITY %in% sample(as.character(chi_yearly$COMMUNITY),10)) %>%
+ggplot(aes(x=unemp_demeaned,y=violent_demeaned)) +
+geom_line(aes(color=COMMUNITY)) 
+
+fe_residuals_predicted_plot <- chi_yearly %>%
+ggplot(aes(x=log(unemp_demeaned),y=residuals(fe_model))) +
+geom_point() +
+geom_smooth()
+
+#residuals vs. fitted and residuals vs. demeaned unemp_rate for fe_plot
+plot(fe_model)
+
+#first differences (fd) model w/ lagged difference of log(unemp_rate) as predictor variable to eliminate unobserved community-dependent heterogeneity
+chi_yearly <- chi_yearly %>%
+group_by(COMMUNITY) %>%
+mutate(unemp_lag =  lag(unemp_rate),
+violent_lag = lag(violent_rate),
+unemp_fd = unemp_rate - unemp_lag,
+violent_fd = violent_rate-violent_lag,
+unemp_lag_2 = lag(unemp_lag),
+unemp_sd = unemp_lag - unemp_lag_2)
+
+fd_model <- lm(violent_fd ~ (unemp_fd) + (factor(Year) - lag(factor(Year))),chi_yearly)
+
+summary(fd_model)
+
+#see residuals vs. fitted plot for heteroskedasticity and residuals vs. unemp_difference predictor from fd_model plot
+plot(fd_model)
+
+fd_residuals_predicted <- chi_yearly %>%
+mutate(unemp_diff = unemp_rate - lag(unemp_rate)) %>%
+ungroup() %>%
+tail(n=692) %>%
+ggplot(aes(x=unemp_diff,y=residuals(fd_model))) +
+geom_point(fill='white') +
+geom_smooth()
+
+fd_residuals_log_predicted <- chi_yearly %>%
+mutate(unemp_diff = log(unemp_rate) - lag(log(unemp_rate))) %>%
+ungroup() %>%
+tail(n=692) %>%
+ggplot(aes(x=unemp_diff,y=residuals(fd_model))) +
+geom_point(fill='white') +
+geom_smooth()
+
+#plot time series residual plot to see if autocorrelation of errors across time periods
+plot(tail(chi_yearly$Year,n=692),fd_model$residuals)
+plot(head(chi_yearly$Year,n=692),fd_model$residuals)
+
+#demeaning and differencing improve skewness of underlying data, e.g. unemp_rate
+unemp_rate_hist <- hist(chi_yearly$unemp_rate)
+unemp_demeaned_hist <- hist(chi_yearly$unemp_demeaned)
+unemp_diff_hist <- hist(chi_yearly$unemp_rate - chi_yearly$unemp_lag)
+
+#add distance to city center as variable... need to add column w/ relative (or actual) distance since that affects actual foot traffic... or see if # of visitors is possible variable
+
