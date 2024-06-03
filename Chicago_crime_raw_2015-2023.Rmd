@@ -110,6 +110,8 @@ comm_snapshot_17 <- read.csv('Crime Stats/CDStest_-2017.csv')
 comm_snapshot_16 <- read.csv('Crime Stats/CDStest_-2016.csv')
 comm_snapshot_15 <- read.csv('Crime Stats/CDStest_-2015.csv')
 
+#should just join above into desired columns, leave NA for those w/o those columns, and then join that to community_crime_yr summary to get data instead of going year by year
+
 #investigate 2023 crime in relation to community snapshots to investigate possible explanatory variables
 #clean comm_snapshot_23 to fit join
 comm_snapshot_23 <- comm_snapshot_23 %>%
