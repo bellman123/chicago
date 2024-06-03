@@ -8,5 +8,7 @@ I attempt to diagnose underlying causes of violent crime trends by investigating
 The Chicago_crime_raw_2015-2023 contains the R code that contains the data manipulation, cleaning, analysis, plotting, and modeling tasks accomplished thus far. the R_workspace provides the actual objects created by the raw code.
 
 Raw data available at CMAP and Chicago PD websites:
+
 CMAP: https://datahub.cmap.illinois.gov/search?categories=%252Fcategories%252Feconomy&q=Community%20Data%20Snapshots
+
 CPD: https://home.chicagopolice.org/statistics-data/statistical-reports/
