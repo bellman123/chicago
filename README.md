@@ -6,3 +6,7 @@ This project is intended to provide a summary overview of various aspects of cri
 I attempt to diagnose underlying causes of violent crime trends by investigating factors such as unemployment and their effect on violent crime rates, if any. Various statistical methods are used, such as pooled OLS, fixed effects, and first differences. Heterogeneity in the models as well as skewness in the underlying data remain a challenge, and further work is necessary to determine omitted variables. 
 
 The Chicago_crime_raw_2015-2023 contains the R code that contains the data manipulation, cleaning, analysis, plotting, and modeling tasks accomplished thus far. the R_workspace provides the actual objects created by the raw code.
+
+Raw data available at CMAP and Chicago PD websites:
+CMAP: https://datahub.cmap.illinois.gov/search?categories=%252Fcategories%252Feconomy&q=Community%20Data%20Snapshots
+CPD: https://home.chicagopolice.org/statistics-data/statistical-reports/
