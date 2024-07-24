@@ -1,6 +1,6 @@
-## chicago
+# chicago
 
-# chicago-businesses
+## chicago-businesses
 Chicago community dataset using business license data from the City of Chicago's data portal, crime data from Chicago PD built out in chicago-crime, as well as figures for socioeconomic factors from the Chicago Metropolitan Agency for Planning (CMAP). 
 
 The chicago-businesses R script creates the data set as well as corresponding summary tables and the underlying objects used to create the final dataset. The final data set is the result of several joins of tables containing the independent data sets. Cleaning and manipulation was required to pull together a complete data set that is usable for analysis. 
@@ -15,7 +15,7 @@ CMAP community factors: https://datahub.cmap.illinois.gov/search?categories=%252
 
 CPD crime data: https://home.chicagopolice.org/statistics-data/statistical-reports/
 
-# chicago-crime
+## chicago-crime
 Chicago PD data analysis on Chicago community areas between 2015-2023
 
 This project is intended to provide a summary overview of various aspects of crime in Chicago neighborhoods. Combining several years of public data provided by the Chicago Police and CMAP, this code showcases several summary views and plots of violent crime and demographic variables across neighborhood and year to give a high-level overview of trends and potential exacerbators of crime. The intention is to deliver an understanding of the issues faced predominantly by West and South side neighborhoods with disproportionately high crime rates. 
