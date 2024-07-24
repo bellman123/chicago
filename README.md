@@ -1,4 +1,4 @@
-# chicago
+## chicago
 
 # chicago-businesses
 Chicago community dataset using business license data from the City of Chicago's data portal, crime data from Chicago PD built out in chicago-crime, as well as figures for socioeconomic factors from the Chicago Metropolitan Agency for Planning (CMAP). 
