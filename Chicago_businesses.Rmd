@@ -1,0 +1,325 @@
+---
+title: "Development Project 05-30-2024"
+author: "bellman123"
+date: "2024-05-30"
+output: html_document
+---
+
+#load required packages
+library(tidyverse)
+library(ggplot2)
+library(rvest)
+library(data.table)
+library(readxl)
+library(datawizard)
+library(plm)
+
+#load in chi_yearly 
+load("~/Practice Environment/Crime Stats/R data/Chicago_Crimes_Community_Stats.RData")
+
+#objects of interest
+rm(list = ls()[!ls() %in% c('chi_yearly','community_crime_yr')])
+
+#set working directory
+setwd("/Users/benfest12/Practice Environment")
+
+#community snapshot data from CMAP
+comm_snapshot_23 <- read.csv('Crime Stats/Community_Data_Snapshots_2023_-7949553649742586148.csv')
+comm_snapshot_22 <- read.csv('Crime Stats/CDStest_2022.csv')
+comm_snapshot_21 <- read.csv('Crime Stats/CDStest_2021.csv')
+comm_snapshot_20 <- read.csv('Crime Stats/CDStest_2020.csv')
+comm_snapshot_19 <- read.csv('Crime Stats/CDStest_-2019.csv')
+comm_snapshot_18 <- read.csv('Crime Stats/CDStest_-2018.csv')
+comm_snapshot_17 <- read.csv('Crime Stats/CDStest_-2017.csv')
+comm_snapshot_16 <- read.csv('Crime Stats/CDStest_-2016.csv')
+comm_snapshot_15 <- read.csv('Crime Stats/CDStest_-2015.csv')
+
+#Add year to each comm_snapshot data set before merging
+comm_snapshot_23 <- comm_snapshot_23 %>%
+mutate(year = as.numeric('2023'))
+
+comm_snapshot_22 <- comm_snapshot_22 %>%
+mutate(year = as.numeric('2022'))
+
+comm_snapshot_21 <- comm_snapshot_21 %>%
+mutate(year = as.numeric('2021'))
+
+comm_snapshot_20 <- comm_snapshot_20 %>%
+mutate(year = as.numeric('2020'))
+
+comm_snapshot_19 <- comm_snapshot_19 %>%
+mutate(year = as.numeric('2019'))
+
+comm_snapshot_18 <- comm_snapshot_18 %>%
+mutate(year = as.numeric('2018'))
+
+comm_snapshot_17 <- comm_snapshot_17 %>%
+mutate(year = as.numeric('2017'))
+
+comm_snapshot_16 <- comm_snapshot_16 %>%
+mutate(year = as.numeric('2016'))
+
+comm_snapshot_15 <- comm_snapshot_15 %>%
+mutate(year = as.numeric('2015'),
+GEOG = CCA) %>%
+select(-CCA)
+
+#convert columns to character for merge
+comm_snapshot_23[] <- lapply(comm_snapshot_23,as.character)
+comm_snapshot_22[] <- lapply(comm_snapshot_22,as.character)
+comm_snapshot_21[] <- lapply(comm_snapshot_21,as.character)
+comm_snapshot_20[] <- lapply(comm_snapshot_20,as.character)
+comm_snapshot_19[] <- lapply(comm_snapshot_19,as.character)
+comm_snapshot_18[] <- lapply(comm_snapshot_18,as.character)
+comm_snapshot_17[] <- lapply(comm_snapshot_17,as.character)
+comm_snapshot_16[] <- lapply(comm_snapshot_16,as.character)
+comm_snapshot_15[] <- lapply(comm_snapshot_15,as.character)
+
+#merge comm_snapshot datasets
+comm_snapshot <- bind_rows(comm_snapshot_23,
+comm_snapshot_22,
+comm_snapshot_21,
+comm_snapshot_20,
+comm_snapshot_19,
+comm_snapshot_18,
+comm_snapshot_17,
+comm_snapshot_16,
+comm_snapshot_15)
+
+#clean comm_snapshots by removing rows with numerous missing values
+comm_snapshot <- comm_snapshot[,colSums(is.na(comm_snapshot)) < 200]
+
+#remove annual snapshots to tidy environment
+rm(list = ls()[grep('^comm_snapshot_',ls())])
+
+#add unemp_rate, lbfrc_rate, reorder columns
+comm_snapshot <- comm_snapshot %>%
+mutate(unemp_rate = as.numeric(UNEMP)/as.numeric(IN_LBFRC),
+lbfrc_rate = as.numeric(IN_LBFRC)/(as.numeric(IN_LBFRC)+as.numeric(NOT_IN_LBFRC)))
+
+comm_snapshot <- comm_snapshot[ ,c(1,2,128:130,3:127)]
+
+#clean comm_snapshot by manipulating column types to numeric, rounding to clean format, etc.
+comm_snapshot <- comm_snapshot %>%
+mutate_at(vars(-GEOG,-RES_NAICS1_TYPE, -RES_NAICS2_TYPE, -RES_NAICS3_TYPE, -RES_NAICS4_TYPE, -RES_NAICS5_TYPE, -WORK_NAICS1_TYPE, -WORK_NAICS2_TYPE, -WORK_NAICS3_TYPE, -WORK_NAICS4_TYPE, -WORK_NAICS5_TYPE, -RES_CITY1_TYPE, -RES_CITY2_TYPE, -RES_CITY3_TYPE, -RES_CITY4_TYPE, -RES_CITY5_TYPE, -WORK_CITY1_TYPE, -WORK_CITY2_TYPE, -WORK_CITY3_TYPE, -WORK_CITY4_TYPE, -WORK_CITY5_TYPE),as.numeric) %>%
+arrange(GEOG,year)
+
+#clean missing values from MED_HA and check other columns for missing values
+comm_snapshot <- comm_snapshot %>%
+mutate(MED_HA = ifelse(MED_HA <= 0,NA,MED_HA))
+
+comm_snapshot[,colSums(is.na(comm_snapshot)) >100]
+
+#OBJECTID, AG, Agperc, and OPEN_SPACE_PER_1000 all have significant missing values and aren't of interest
+comm_snapshot <- comm_snapshot %>%
+select(c(-OBJECTID,-AG,-Agperc,-OPEN_SPACE_PER_1000))
+
+#load in business license data
+chi_businesses <- read_csv('Crime Stats/Business_Licenses.csv')
+
+#rename columns for chi_businesses df
+colnames(chi_businesses) <- c('ID','License_id','Account_num','Site_num','Legal_name','DBA_name','Address','City','State','Zip_code','Ward','Precinct','Ward_precinct','Police_district','License_code','License_description','Business_activity_id','Business_activity','License_num','Application_type','Application_created_date','Application_complete','Payment_date','Conditional_approval','License_start_date','License_expiration_date','License_approved_for_issuance','Date_issued','License_status','License_status_change_date','SSA','Latitude','Longitude','GPS')
+
+#create Year column from Date_issued column (use substr() to get last four characters)
+chi_businesses <- chi_businesses %>%
+mutate(year_issued = ifelse(is.na(Date_issued), Date_issued, substr(Date_issued,nchar(Date_issued)-3,nchar(Date_issued))))
+
+#place Year column towards front of data set
+chi_businesses <- chi_businesses[,c(1:28,35,29:34)]
+
+#business license yearly summary (2024 is incomplete)
+chi_bus_yr <- chi_businesses %>%
+group_by(year_issued) %>%
+summarize(count = n(), ISSUE = sum(ifelse(Application_type == 'ISSUE',1,0)), RENEW = sum(ifelse(Application_type == 'RENEW',1,0)),
+NEW_BUSINESS = sum(ifelse(Application_type == 'ISSUE' & Site_num == 1,1,0)))
+
+
+#using "sf" package to perform Spatial Joins to associate businesses with CCA
+library(sf)
+
+#have to fix crs on chi_bus_address_sf dataframe to join with CCA_borders (created below, want to place in order of priority when running)
+
+#first attempt to fix crs: fix Longitude and Latitude for more precise coordinates
+chi_businesses <- separate_wider_delim(chi_businesses,GPS,delim = ',',names = c('GPS_lat','GPS_long'))
+
+#clean coordinates by removing "(" and ")" using // character escape
+chi_businesses <- chi_businesses %>%
+mutate(GPS_long = gsub("\\)","",GPS_long),
+GPS_lat = gsub("\\(","",GPS_lat))
+
+chi_businesses <- chi_businesses %>%
+select(c(-Longitude,-Latitude))
+
+#create dataframe from chi_businesses with just address and ID data
+chi_bus_location <- chi_businesses %>%
+select(c(ID,License_id,Account_num,Site_num,Legal_name,License_description,Business_activity,Application_type,Date_issued,year_issued,License_start_date,License_expiration_date,GPS_lat,GPS_long)) %>%
+filter(!is.na(GPS_long))
+
+#convert chi_bus_address to sf object
+chi_bus_location_sf <- st_as_sf(chi_bus_location,coords = c('GPS_long','GPS_lat'))
+
+#CCA Borders shapefile
+CCA_borders <- st_read('Development Project/Boundaries - Community Areas (current)/geo_export_006f614e-a6ef-4d32-9c1e-2f074b2aa44c.shp')
+
+#get desired columns from CCA_borders
+CCA_borders <- CCA_borders %>%
+select(c(area_num_1,community,shape_area,geometry))
+
+#set st_crs equivalent in order to spatial join in next step
+st_crs(chi_bus_location_sf) <- st_crs(CCA_borders)
+
+#Spatial Join chi_bus_address and CCA_borders
+chi_businesses_2 <- st_join(chi_bus_location_sf,CCA_borders)
+
+#add expiration year column to track active businesses by year
+chi_businesses_2 <- chi_businesses_2 %>%
+mutate(year_expired = as.numeric(ifelse(is.na(License_expiration_date), License_expiration_date, substr(License_expiration_date,nchar(License_expiration_date)-3,nchar(License_expiration_date)))))
+
+chi_businesses_2 <- chi_businesses_2 %>% 
+mutate(year_issued = as.numeric(year_issued))
+
+#create lists of active businesses by year to be used to total
+chi_businesses_2 <- chi_businesses_2 %>%
+mutate(active_2015 = ifelse(year_issued <= 2015 & year_expired > 2015,1,0),
+active_2016 = ifelse(year_issued <= 2016 & year_expired > 2016,1,0),
+active_2017 = ifelse(year_issued <= 2017 & year_expired > 2017,1,0),
+active_2018 = ifelse(year_issued <= 2018 & year_expired > 2018,1,0),
+active_2019 = ifelse(year_issued <= 2019 & year_expired > 2019,1,0),
+active_2020 = ifelse(year_issued <= 2020 & year_expired > 2020,1,0),
+active_2021 = ifelse(year_issued <= 2021 & year_expired > 2021,1,0),
+active_2022 = ifelse(year_issued <= 2022 & year_expired > 2022,1,0),
+active_2023 = ifelse(year_issued <= 2023 & year_expired > 2023,1,0))
+
+#get total businesses to join with other summary
+total_businesses <- chi_businesses_2 %>%
+as_tibble() %>%
+group_by(community) %>%
+summarize(active_2015 = sum(active_2015,na.rm = TRUE),
+active_2016 = sum(active_2016,na.rm = TRUE),
+active_2017 = sum(active_2017,na.rm = TRUE),
+active_2018 = sum(active_2018,na.rm = TRUE),
+active_2019 = sum(active_2019,na.rm = TRUE),
+active_2020 = sum(active_2020,na.rm = TRUE),
+active_2021 = sum(active_2021,na.rm = TRUE),
+active_2022 = sum(active_2022,na.rm = TRUE),
+active_2023 = sum(active_2023,na.rm = TRUE))
+
+#Go from wide to long total_businesses dataframe
+total_businesses <- total_businesses %>%
+  pivot_longer(cols = starts_with("active_"), names_to = "year", values_to = "active_businesses") %>%
+  mutate(year = as.integer(sub("active_", "", year)))
+
+#summarize job growth by community and year (sorted by growth rate); this larger table will be used to create a summary of the community growth rate for each community that can be plotted, etc.
+community_business_yr <- chi_businesses_2 %>%
+group_by(community,year_issued) %>%
+summarize(issued_license = sum(ifelse(Application_type == 'ISSUE',1,0)),
+new_business = sum(ifelse(Application_type == 'ISSUE' & Site_num == 1,1,0))) %>%
+filter(year_issued != 2024) %>%
+arrange(community,year_issued) %>%
+rename(year = year_issued)
+
+community_business_yr <- community_business_yr %>%
+mutate(year = as.numeric(year))
+
+#join community_business_yr to total_businesses
+community_business_yr <- total_businesses %>%
+left_join(community_business_yr,by=c('community','year'))  %>%
+as_tibble() %>%
+select(-geometry)
+
+#add growth rate to community_business_yr
+community_business_yr <- community_business_yr %>%
+ungroup() %>%
+group_by(community) %>%
+mutate(bus_growth = 100 * (active_businesses - dplyr::lag(active_businesses, n = 1L))/dplyr::lag(active_businesses, n=1L))
+
+#join comm_snapshot to community_business_yr and community_crime_yr
+chi_community <- comm_snapshot %>%
+mutate(GEOG = toupper(GEOG),
+GEOG = ifelse(GEOG=='THE LOOP','LOOP',GEOG),
+GEOG = ifelse(GEOG=="O'HARE","OHARE",GEOG)) %>%
+left_join(community_business_yr,by=c('GEOG'='community','year')) %>%
+left_join(community_crime_yr,by=c('GEOG'='COMMUNITY','year'='Year'))
+
+#add in crime rates to replace raw figures for crime stats
+chi_community <- chi_community %>%
+group_by(GEOG,year) %>%
+mutate(crime_rate = round(((Criminal_Damage + Battery + Robbery + Theft + Assaults+ Burglary + GTA + Narcotics + Weapons_violation + SA + Sex_Offense + Stalking + Homicide + Arson + Kidnapping + Prostitution + Human_traf + Deceptive_practice)/TOT_POP)*100000, digits=2),
+Violent = round((Violent/TOT_POP)*100000, digits=2),
+Criminal_Damage = round((Criminal_Damage/TOT_POP)*100000, digits=2),
+Battery = round((Battery/TOT_POP)*100000, digits=2),
+Robbery = round((Robbery/TOT_POP)*100000, digits=2),
+Theft = round((Theft/TOT_POP)*100000, digits=2),
+Assaults = round((Assaults/TOT_POP)*100000, digits=2),
+Burglary = round((Burglary/TOT_POP)*100000, digits=2),
+GTA = round((GTA/TOT_POP)*100000, digits=2),
+Narcotics = round((Narcotics/TOT_POP)*100000, digits=2),
+Weapons_violation = round((Weapons_violation/TOT_POP)*100000, digits=2),
+SA = round((SA/TOT_POP)*100000, digits=2),
+Sex_Offense = round((Sex_Offense/TOT_POP)*100000, digits=2),
+Stalking = round((Stalking/TOT_POP)*100000, digits=2),
+Homicide = round((Homicide/TOT_POP)*100000, digits=2),
+Arson = round((Arson/TOT_POP)*100000, digits=2),
+Kidnapping = round((Kidnapping/TOT_POP)*100000, digits=2),
+Prostitution = round((Prostitution/TOT_POP)*100000, digits=2),
+Human_traf = round((Human_traf/TOT_POP)*100000, digits=2),
+Deceptive_practice = round((Deceptive_practice/TOT_POP)*100000, digits=2))
+
+#column names to lower
+colnames(chi_community) <- tolower(colnames(chi_community))
+
+#reorder columns in chi_community to put crime_rate, violent crime rate, active businesses, and total pop closer to beginning
+chi_community <- chi_community[,c(1:4,7,152,151,5,6,8:150)]
+
+#round all numeric columns and remove '.00' from values (makes all columns characters)
+chi_community <- chi_community %>%
+mutate_if(is.numeric, ~ round(.,digits=2))
+
+chi_community <- chi_community %>%
+mutate_if(is.numeric, ~ gsub('*//.00','',.))
+
+#convert columns back to numeric
+chi_community <- chi_community %>%
+mutate_at(vars(-geog,-res_naics1_type, -res_naics2_type, -res_naics3_type, -res_naics4_type, -res_naics5_type, -work_naics1_type, -work_naics2_type, -work_naics3_type, -work_naics4_type, -work_naics5_type, -res_city1_type, -res_city2_type, -res_city3_type, -res_city4_type, -res_city5_type, -work_city1_type, -work_city2_type, -work_city3_type, -work_city4_type, -work_city5_type),as.numeric) %>%
+arrange(geog,year)
+
+#add column to determine active businesses per person
+chi_community <- chi_community %>%
+mutate(bus_per_person = active_businesses/tot_pop)
+
+#rename geog to community
+chi_community <- chi_community %>%
+rename(community = geog)
+
+#add in REGION to analyze businesses by region
+#ADD REGIONS IN, WHAT AREAS OF THE CITY ARE SEEING MORE VS. LESS GROWTH? GROWTH BY RACIAL MAKEUP?
+CCA_REGION <- read_csv("CCA REGION.csv")
+
+CCA_REGION <- CCA_REGION %>%
+select(c(COMMUNITY,REGION)) %>%
+rename(community = COMMUNITY,
+region = REGION) %>%
+mutate(region = str_to_title(region)) %>%
+mutate(region = gsub("* Side","",region))
+
+#change regions to abbreviations manually
+CCA_REGION <- CCA_REGION %>%
+mutate(region = case_when(
+    region == "Far North" ~ "Far N",
+    region == "Northwest" ~ "NW",
+    region == "North" ~ "N",
+    region == "West" ~ "W",
+    region == "Central" ~ "C",
+    region == "South" ~ "S",
+    region == "Southwest" ~ "SW",
+    region == "Far Southeast" ~ "Far SE",
+    region == "Far Southwest" ~ "Far SW"
+))
+
+#join chi_community and CCA_REGION and move region column
+chi_community <- chi_community %>%
+left_join(CCA_REGION,by='community')
+
+chi_community <- chi_community[,c(1,2,154,3:153)]
+
+
