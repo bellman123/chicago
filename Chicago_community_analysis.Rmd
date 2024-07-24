@@ -145,8 +145,22 @@ group_by(community,year) %>%
 ggplot(aes(x=cluster,y= medinc)) +
 geom_boxplot(aes(group=cluster)) 
 
+#analyze using business growth to isolate effects of changes to business licenses and attempt to get rid of between-neighborhood effects (simulating first differences approach); effect of business growth and median income is too small
 
+chi_community %>%
+filter(year >2016) %>%
+ggplot(aes(x=bus_growth, y= (medinc-dplyr::lag(medinc,n=1L)))) +
+geom_point() +
+geom_smooth()
 
+#business growth and crime relationship; little to no relationship
+chi_community %>%
+filter(year >2016) %>%
+ggplot(aes(x=bus_growth, y= violent)) +
+geom_point() +
+geom_smooth()
+
+#it's possible that the rate of change of business licenses doesn't capture the true growth of businesses and business activity in a neighborhood in any given year. To analyze business' effects on income, crime, etc., it is likely that there will be a disconnect between business activity and residual effects to the neighborhood; Alternatively, increased business activity could be a sign of already rising income, decreasing crime, etc., potentially reversing the relationship
 
 
 
