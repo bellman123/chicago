@@ -1,7 +1,7 @@
 # chicago
 
 ## chicago-businesses
-Chicago community dataset using business license data from the City of Chicago's data portal, crime data from Chicago PD built out in chicago-crime, as well as figures for socioeconomic factors from the Chicago Metropolitan Agency for Planning (CMAP). 
+Data set that combines several years of publicly available data for businesses, crime, unemployment, and other socioeconomic factors using business license data from the City of Chicago's data portal, crime data from Chicago PD built out in chicago-crime, as well as figures for socioeconomic factors from the Chicago Metropolitan Agency for Planning (CMAP). I have combined these datasets to create a holistic overview of neighborhood health and characteristics over time (2015-2023) in the hopes of both shedding light on the stark divide between Chicago's neighborhoods and potential policy areas to address underdeveloped neighborhoods.
 
 The chicago-businesses R script creates the data set as well as corresponding summary tables and the underlying objects used to create the final dataset. The final data set is the result of several joins of tables containing the independent data sets. Cleaning and manipulation was required to pull together a complete data set that is usable for analysis. 
 
