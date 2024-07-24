@@ -1,6 +1,6 @@
 #chicago
 
-# chicago-businesses
+ chicago-businesses
 Chicago community dataset using business license data from the City of Chicago's data portal, crime data from Chicago PD built out in chicago-crime, as well as figures for socioeconomic factors from the Chicago Metropolitan Agency for Planning (CMAP). 
 
 The chicago-businesses R script creates the data set as well as corresponding summary tables and the underlying objects used to create the final dataset. The final data set is the result of several joins of tables containing the independent data sets. Cleaning and manipulation was required to pull together a complete data set that is usable for analysis. 
